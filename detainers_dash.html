@@ -333,7 +333,7 @@ function compute() {
   s.fac.forEach(f => facChk[f] = 1); s.cfac.forEach(f => cArr[f] = 1);
   const selC = new Int32Array(nF * nR), compC = new Int32Array(nR), stC = new Int32Array(nR);
   const serFac = new Int32Array(nF * Math.max(nP, 1)), serComp = new Int32Array(Math.max(nP, 1)), serAgg = new Int32Array(Math.max(nP, 1));
-  let undated = 0, has287 = false;
+  let undated = 0, has287 = false, attrExcluded = 0;
   const useYM = s.unit === 'month';
 
   for (let i = 0; i < N; i++) {
@@ -361,12 +361,17 @@ function compute() {
       else if (af === 8) present.gov[col.gov[i]] = 1;
     }
     if (af === 0) pool[f] = 1;
+    if (rf === 0 && af !== 0) attrExcluded++;   // passes date/reason/crim/threat but fails a Facility filter - excluded everywhere below
     if (rf !== 0) continue;
 
     stC[r]++;
+    // Facility type/gov level/location/government are true filters: a row that fails one of
+    // them (af !== 0) is dropped entirely, not folded into "All other facilities."
     let inSel = false, inCmp = false;
-    if (af === 0 && facChk[f]) { selC[f * nR + r]++; inSel = true; }
-    else if (s.cmode === 'all' || (s.cmode === 'custom' && cArr[f])) { compC[r]++; inCmp = true; }
+    if (af === 0) {
+      if (facChk[f]) { selC[f * nR + r]++; inSel = true; }
+      else if (s.cmode === 'all' || (s.cmode === 'custom' && cArr[f])) { compC[r]++; inCmp = true; }
+    }
     if (!has) { undated++; continue; }
     const p = (useYM ? rowYM[i] : rowYr[i]) - per.base;
     if (p < 0 || p >= nP) continue;
@@ -374,7 +379,7 @@ function compute() {
     else if (inCmp) serComp[p]++;
   }
   const selFacs = facOrder.filter(f => facChk[f] && pool[f]);
-  return {present, has287, pool, facChk, selFacs, selC, compC, stC, nR, nF, per, nP, serFac, serComp, serAgg, undated, fullRange};
+  return {present, has287, pool, facChk, selFacs, selC, compC, stC, nR, nF, per, nP, serFac, serComp, serAgg, undated, attrExcluded, fullRange};
 }
 
 /* ---------- table ---------- */
@@ -431,6 +436,7 @@ function renderTable(m) {
   let note = s.pct ? 'Percent mode: each cell is the share of that row\u2019s total (sums to 100% across the columns shown). Totals are counts.' : '';
   if (T.hiddenZero) note += (note ? ' ' : '') + `${T.hiddenZero} selected facilit${T.hiddenZero === 1 ? 'y' : 'ies'} with no matching requests hidden.`;
   if (m.undated && m.fullRange) note += (note ? ' ' : '') + `${fmt(m.undated)} record(s) have no prepare date; they are counted in the table but not plotted.`;
+  if (m.attrExcluded) note += (note ? ' ' : '') + `${fmt(m.attrExcluded)} record(s) don't match the current Facility type, gov level, location or government filters and are excluded from every row above, including Total.`;
   const gl = T.cols.map(r => dict.reason[r]).filter(n => RMEM[n]);
   $('#tblNote').innerHTML = esc(note) + (gl.length ? '<div class="gnote">' + gl.map(n => `<div><b>${esc(n)}</b> = ${esc(RMEM[n].join('; '))}</div>`).join('') + '</div>' : '');
 }
